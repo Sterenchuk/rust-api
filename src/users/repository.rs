@@ -53,4 +53,31 @@ pub fn get_user(id: &str) -> Result<User, AppError> {
         .ok_or(AppError::NotFound)
 }
 
-pub fn create_user(user: User) -> Result<User, AppError_
+pub fn create_user(user: User) -> Result<User, AppError> {
+    let mut users = read_users()?;
+    users.push(user.clone());
+    write_users(&users)?;
+    Ok(user)
+}
+
+pub fn update_user(id: &str, updated_user: User) -> Result<User, AppError> {
+    let mut users = read_users()?;
+    let pos = users
+        .iter()
+        .position(|u| u.id.to_string() == id)
+        .ok_or(AppError::NotFound)?;
+    users[pos] = updated_user.clone();
+    write_users(&users)?;
+    Ok(updated_user)
+}
+
+pub fn delete_user(id: &str) -> Result<(), AppError> {
+    let mut users = read_users()?;
+    let len_before = users.len();
+    users.retain(|u| u.id.to_string() != id);
+    if users.len() == len_before {
+        return Err(AppError::NotFound);
+    }
+    write_users(&users)?;
+    Ok(())
+}
