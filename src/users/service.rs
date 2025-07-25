@@ -1,41 +1,81 @@
-use crate::{helpers::errors::AppError, users::model::User, users::repository};
+use crate::helpers::{
+    errors::AppError,
+    hash};
+use crate::users::{
+    model::{User, UserInput},
+    repository,
+};
+use sqlx::PgPool;
 use uuid::Uuid;
 
-pub fn create_user(name: String, email: String, password: String) -> Result<User, AppError> {
-    let user = User {
-        id: Uuid::new_v4(),
-        name,
-        email,
-        password,
-    };
 
-    repository::create_user(user)
+pub async fn create_user(pool: &PgPool, user: UserInput) -> Result<User, AppError> {
+    match repository::get_user_by_email(pool, &user.email).await {
+        Ok(_) => {
+            return Err(AppError::Conflict);
+        }
+        Err(AppError::NotFound) => {}
+        Err(e) => {
+            eprintln!("Unexpected error checking user existence: {:?}", e);
+            return Err(AppError::Internal);
+        }
+    }
+
+    let hash = hash::hash_password(&user.password).map_err(|_| AppError::Internal)?; 
+
+    match repository::create_user(pool, &user.name, &user.email, &hash).await {
+        Ok(user) => Ok(user),
+        Err(AppError::NotFound) => Err(AppError::NotFound),
+        Err(e) => {
+            eprintln!("Unexpected error creating user: {:?}", e);
+            Err(AppError::Internal)
+        }
+    }
 }
 
-pub fn get_all_users() -> Result<Vec<User>, AppError> {
-    repository::get_all_users()
+pub async fn get_all_users(pool: &PgPool) -> Result<Vec<User>, AppError> {
+    match repository::get_all_users(pool).await {
+        Ok(users) => Ok(users),
+        Err(AppError::NotFound) => Err(AppError::NotFound),
+        Err(e) => {
+            eprintln!("Unexpected error creating user: {:?}", e);
+            Err(AppError::Internal)
+        }
+    }
 }
 
-pub fn get_user(id: String) -> Result<User, AppError> {
-    repository::get_user(&id)
+pub async fn get_user(pool: &PgPool, id: Uuid) -> Result<User, AppError> {
+    match repository::get_user(pool, id).await {
+        Ok(user) => Ok(user),
+        Err(AppError::NotFound) => Err(AppError::NotFound),
+        Err(e) => {
+            eprintln!("Unexpected error creating user: {:?}", e);
+            Err(AppError::Internal)
+        }
+    }
 }
 
-pub fn update_user(
-    id: String,
-    name: String,
-    email: String,
-    password: String,
-) -> Result<User, AppError> {
-    let user = User {
-        id: Uuid::parse_str(&id).map_err(|_| AppError::NotFound)?,
-        name,
-        email,
-        password,
-    };
+pub async fn update_user(pool: &PgPool, id: Uuid, user: UserInput) -> Result<User, AppError> {
 
-    repository::update_user(&id, user)
+    let hash = hash::hash_password(&user.password).map_err(|_| AppError::Internal)?;
+
+    match repository::update_user(pool, id, &user.name, &user.email, &hash).await {
+        Ok(user) => Ok(user),
+        Err(AppError::NotFound) => Err(AppError::NotFound),
+        Err(e) => {
+            eprintln!("Unexpected error creating user: {:?}", e);
+            Err(AppError::Internal)
+        }
+    }
 }
 
-pub fn delete_user(id: String) -> Result<(), AppError> {
-    repository::delete_user(&id)
+pub async fn delete_user(pool: &PgPool, id: Uuid) -> Result<(), AppError> {
+    match repository::delete_user(pool, id).await {
+        Ok(()) => Ok(()),
+        Err(AppError::NotFound) => Err(AppError::NotFound),
+        Err(e) => {
+            eprintln!("Unexpected error creating user: {:?}", e);
+            Err(AppError::Internal)
+        }
+    }
 }
